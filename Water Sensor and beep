@@ -1,0 +1,48 @@
+//Here is defining two variable quantities
+#define DH1 523
+#define DH2 0
+//Here is the hole rate of voice
+#define WHOLE 1
+#define HALF 0.5
+#define QUARTER 0.25
+#define EIGHTH 0.25
+#define SIXTEENTH 0.625
+//define hole rate
+int tune1[] = {DH1,DH1,DH1,DH1};
+int tune2[] = {DH2,DH2,DH2,DH2};
+//The beat
+float duration[]={1,0.5,0.5,1,};
+int length; //the number of tune1[] or tune2[]
+int temp; //output the condition of Water Sensor
+int beep = 8;  //define the pin8 of beep
+int water = 4; //define the pin4 of Water Sensor
+void setup() {
+  Serial.begin(9600);
+  pinMode(beep, OUTPUT); //define the output pin of beep
+  pinMode(water, INPUT); //define the output pin of Water Sensor
+  length=sizeof(tune1)/sizeof(tune1[0]);   //calculate the length of tune
+
+void loop() {
+  temp = digitalRead(water); //get the condition of ater Sensor
+  Serial.print(temp); //read the value on the monitor
+  if(temp == 1){
+    //digitalWrite(beep, HIGH); 
+     for(int x=0;x<length;x++)
+  {
+    tone(beep,tune1[x]); //play the tune
+    delay(500*duration[x]); //Each voice's lasting time.If the value bigger ,the slower it will play.
+    noTone(beep); //stop
+  }
+  delay(100); //Wait for 100ms and restart
+  }
+  else{ 
+     for(int x=0;x<length;x++)
+  {
+    tone(beep,tune2[x]); //play the tune
+    delay(500*duration[x]); //Each voice's lasting time.If the value bigger ,the slower it will play.
+    noTone(beep); //stop
+  }
+     
+   }
+ delay(100);
+}
