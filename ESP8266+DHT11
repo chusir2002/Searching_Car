@@ -1,0 +1,170 @@
+#include <ESP8266WiFi.h>
+/* 依赖 PubSubClient 2.4.0 */
+#include <SimpleDHT.h>
+int pinDHT11 = D4;
+SimpleDHT11 dht11(pinDHT11);
+#include <PubSubClient.h>
+/* 依赖 ArduinoJson 5.13.4 */
+#include <ArduinoJson.h>
+#include <SparkFun_SHTC3.h>
+
+/* 连接您的WIFI SSID和密码 */
+#define WIFI_SSID         "WIFI_NAME"
+#define WIFI_PASSWD       "PASSWORD"
+
+
+/* 设备的三元组信息*/
+#define PRODUCT_KEY       "_________"
+#define DEVICE_NAME       "_________"
+#define DEVICE_SECRET     "_________"
+#define REGION_ID         "_________"
+
+/* 线上环境域名和端口号，不需要改 .This part you needn't modify*/
+#define MQTT_SERVER       PRODUCT_KEY ".iot-as-mqtt." REGION_ID ".aliyuncs.com"
+#define MQTT_PORT         1883
+#define MQTT_USRNAME      DEVICE_NAME "&" PRODUCT_KEY
+
+#define CLIENT_ID         "_____________"
+进行加密生成password(This password is the key to connect to the Aliyun)
+#define MQTT_PASSWD       "_____________"
+
+#define ALINK_BODY_FORMAT         "{\"id\":\"ESP8266\",\"version\":\"1.0\",\"method\":\"thing.event.property.post\",\"params\":%s}"
+#define ALINK_TOPIC_PROP_POST     "/sys/" PRODUCT_KEY "/" DEVICE_NAME "/thing/event/property/post"
+
+unsigned long lastMs = 0;
+float RH,T,RH_sum,T_sum;
+unsigned char count=0;
+WiFiClient espClient;
+PubSubClient  client(espClient);
+SHTC3 mySHTC3;
+
+void callback(char *topic, byte *payload, unsigned int length)
+{
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("] ");
+    payload[length] = '\0';
+    Serial.println((char *)payload);
+
+}
+
+void wifiInit()
+{
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWD);   //连接WiFi connect wifi
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(1000);
+        Serial.println("WiFi not Connect");
+    }
+    Serial.println("Connected to AP");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());    
+    Serial.print("espClient [");
+    client.setServer(MQTT_SERVER, MQTT_PORT);   /* 连接WiFi之后，连接MQTT服务器 try to connect to the mqtt*/
+    client.setCallback(callback);
+}
+
+
+void mqttCheckConnect()
+{
+    while (!client.connected())
+    {
+        Serial.println("Connecting to MQTT Server ...");
+        if (client.connect(CLIENT_ID, MQTT_USRNAME, MQTT_PASSWD))
+
+        {
+
+            Serial.println("MQTT Connected!");
+
+        }
+        else
+        {
+            Serial.print("MQTT Connect err:");
+            Serial.println(client.state());
+            delay(5000);
+        }
+    }
+}
+
+
+void mqttIntervalPost()
+{
+    char param[32];
+    char jsonBuf[128];
+    sprintf(param, "{\"CurrentTemperature\":%f}",T_sum/count);
+    sprintf(jsonBuf, ALINK_BODY_FORMAT, param);
+    Serial.println(jsonBuf);
+    boolean d = client.publish(ALINK_TOPIC_PROP_POST, jsonBuf);
+    if(d){
+      Serial.println("publish Temperature success"); 
+    }else{
+      Serial.println("publish Temperature fail"); 
+    }
+    //https://blog.zeruns.tech   
+    sprintf(param, "{\"CurrentHumidity\":%f}",RH_sum/count);
+    sprintf(jsonBuf, ALINK_BODY_FORMAT, param);
+    Serial.println(jsonBuf);
+    d = client.publish(ALINK_TOPIC_PROP_POST, jsonBuf);
+    if(d){
+      Serial.println("publish Humidity success"); 
+    }else{
+      Serial.println("publish Humidity fail"); 
+    }
+}
+
+void errorDecoder(SHTC3_Status_TypeDef message) // The errorDecoder function prints "SHTC3_Status_TypeDef" resultsin a human-friendly way
+{
+  switch(message)
+  {
+    case SHTC3_Status_Nominal : Serial.print("Nominal"); break;
+    case SHTC3_Status_Error : Serial.print("Error"); break;
+    case SHTC3_Status_CRC_Fail : Serial.print("CRC Fail"); break;
+    default : Serial.print("Unknown return code"); break;
+  }
+}
+//https://blog.zeruns.tech
+void setup() 
+{
+    /* initialize serial for debugging */
+    Serial.begin(115200);
+    Serial.println("Demo Start");
+    wifiInit();
+    Wire.begin(D5,D6);           //初始化Wire（IIC）库
+    unsigned char i=0;
+    errorDecoder(mySHTC3.begin());
+}
+
+
+// the loop function runs over and over again forever
+void loop()
+{
+  delay(1000);                  //延时1000毫秒
+    byte T = 0;
+  byte RH = 0;
+  int err = SimpleDHTErrSuccess;
+  if ((err = dht11.read(&T, &RH, NULL)) != SimpleDHTErrSuccess) {
+    Serial.print("Read DHT11 failed, err="); Serial.println(err);delay(1000);
+    return;
+  }
+  
+  Serial.print("Sample OK: ");
+  Serial.print((int)T); Serial.print(" *C, "); 
+  Serial.print((int)RH); Serial.println(" H");                      
+    T = mySHTC3.toDegC();*/       //读取温度数据
+    RH_sum+=RH;
+    T_sum+=T;
+    count+=1;                    
+  if (millis() - lastMs >= 30000)
+  {
+    lastMs = millis();
+    mqttCheckConnect(); 
+
+    /* 上报 */
+    mqttIntervalPost();
+    count=0;
+    RH_sum=0;
+    T_sum=0;
+  }
+  client.loop();
+}
